@@ -1,0 +1,10 @@
+0 Fresh Apple
+1 Rotten Apple
+2 Fresh Banana
+3 Rotten Banana
+4 Fresh Mango
+5 Rotten Mango
+6 Fresh Orange
+7 Rotten Orange
+8 Fresh Strawberry
+9 Rotten Strawberry

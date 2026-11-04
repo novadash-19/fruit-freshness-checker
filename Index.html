@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fruit Freshness Checker</title>
+<style>
+  :root {
+    --bg1: #0b1f1a; --bg2: #123a2e; --bg3: #1b2a4a;
+    --card: rgba(255,255,255,.08); --card-border: rgba(255,255,255,.16);
+    --text: #f2f7f4; --muted: rgba(242,247,244,.65);
+    --fresh: #34d399; --rotten: #fb7185; --accent: #34d399;
+    --track: rgba(255,255,255,.12);
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg1: #e8f7ee; --bg2: #fdf6e3; --bg3: #e3ecfb;
+      --card: rgba(255,255,255,.72); --card-border: rgba(0,0,0,.08);
+      --text: #14231c; --muted: rgba(20,35,28,.62);
+      --fresh: #16a34a; --rotten: #e11d48; --track: rgba(0,0,0,.08);
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { min-height: 100%; }
+  body {
+    margin: 0; color: var(--text); display: flex; align-items: center; justify-content: center;
+    padding: 24px 16px; overflow-x: hidden; min-height: 100vh;
+    font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+    background: linear-gradient(135deg, var(--bg1), var(--bg2) 50%, var(--bg3));
+    background-size: 200% 200%; animation: shift 18s ease infinite;
+  }
+  @keyframes shift { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+
+  .blob { position: fixed; border-radius: 50%; filter: blur(70px); opacity: .45; z-index: 0; animation: float 14s ease-in-out infinite; pointer-events: none; }
+  .b1 { width: 320px; height: 320px; background: #34d399; top: -80px; left: -80px; }
+  .b2 { width: 280px; height: 280px; background: #fbbf24; bottom: -60px; right: -40px; animation-delay: -5s; }
+  .b3 { width: 240px; height: 240px; background: #fb7185; top: 55%; left: 60%; opacity: .25; animation-delay: -9s; }
+  @keyframes float { 0%,100% { transform: translate(0,0); } 50% { transform: translate(30px,-40px); } }
+
+  .card {
+    position: relative; z-index: 1; width: 100%; max-width: 460px; padding: 28px;
+    background: var(--card); border: 1px solid var(--card-border); border-radius: 28px;
+    backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px);
+    box-shadow: 0 20px 60px rgba(0,0,0,.28);
+    transition: box-shadow .5s, border-color .5s;
+  }
+  .card[data-state="fresh"]  { --accent: var(--fresh);  border-color: var(--fresh);  box-shadow: 0 20px 60px rgba(0,0,0,.28), 0 0 40px -6px var(--fresh); }
+  .card[data-state="rotten"] { --accent: var(--rotten); border-color: var(--rotten); box-shadow: 0 20px 60px rgba(0,0,0,.28), 0 0 40px -6px var(--rotten); }
+
+  header { text-align: center; margin-bottom: 18px; }
+  .logo { font-size: 2.6rem; display: inline-block; animation: bob 3s ease-in-out infinite; }
+  @keyframes bob { 0%,100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-6px) rotate(4deg); } }
+  h1 {
+    margin: 6px 0 4px; font-size: 1.7rem; letter-spacing: -.5px;
+    background: linear-gradient(90deg, #34d399, #fbbf24, #fb7185); -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .sub { margin: 0; color: var(--muted); font-size: .95rem; }
+
+  button { font-family: inherit; cursor: pointer; border: 0; }
+
+  /* tabs */
+  .tabs { display: flex; gap: 6px; padding: 5px; background: var(--track); border-radius: 16px; margin-bottom: 16px; }
+  .tab { flex: 1; padding: 10px; border-radius: 12px; background: transparent; color: var(--muted); font-weight: 700; font-size: .95rem; transition: all .2s; }
+  .tab.active { background: linear-gradient(90deg, #34d399, #a3e635); color: #052e1f; box-shadow: 0 6px 16px -6px #34d399; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* upload drop zone */
+  .drop {
+    position: relative; border: 2px dashed var(--card-border); border-radius: 20px; min-height: 230px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+    text-align: center; cursor: pointer; overflow: hidden; color: var(--muted);
+    transition: border-color .2s, background .2s, transform .2s;
+  }
+  .drop:hover, .drop.over, .drop:focus-visible { border-color: var(--accent); background: var(--track); outline: none; }
+  .drop.over { transform: scale(1.02); }
+  .drop .icon { font-size: 2.8rem; }
+  .drop b { color: var(--text); font-size: 1.05rem; }
+  .drop small { font-size: .8rem; }
+  .drop img { width: 100%; height: 100%; max-height: 320px; object-fit: cover; display: block; }
+  .drop.has-img { border-style: solid; }
+
+  .scan { position: absolute; left: 0; right: 0; height: 3px; top: 0; display: none;
+    background: linear-gradient(90deg, transparent, #fff, transparent); box-shadow: 0 0 18px 6px rgba(52,211,153,.8); }
+  .drop.loading .scan { display: block; animation: scan 1.4s ease-in-out infinite; }
+  .drop.loading img { filter: brightness(.7); }
+  @keyframes scan { 0% { top: 0; } 50% { top: calc(100% - 3px); } 100% { top: 0; } }
+
+  /* camera */
+  .cam {
+    position: relative; border-radius: 20px; overflow: hidden; background: #0a0f0d; aspect-ratio: 4 / 3;
+    border: 2px solid var(--card-border); display: flex; align-items: center; justify-content: center;
+    transition: border-color .4s, box-shadow .4s;
+  }
+  .cam[data-state="fresh"]  { border-color: var(--fresh);  box-shadow: 0 0 24px -4px var(--fresh); }
+  .cam[data-state="rotten"] { border-color: var(--rotten); box-shadow: 0 0 24px -4px var(--rotten); }
+  .cam video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; }
+  .cam.on video { display: block; }
+  .cam-ph { color: rgba(255,255,255,.7); text-align: center; padding: 20px; }
+  .cam-ph .icon { font-size: 2.8rem; } .cam-ph b { display: block; font-size: 1.05rem; color: #fff; margin-top: 4px; }
+  .cam-ph small { font-size: .8rem; }
+  .cam.on .cam-ph { display: none; }
+  .guide { position: absolute; top: 4%; bottom: 4%; left: 50%; aspect-ratio: 1 / 1; transform: translateX(-50%);
+    border: 2px dashed rgba(255,255,255,.55); border-radius: 18px; display: none; pointer-events: none; }
+  .cam.on .guide { display: block; }
+  .live-tag { position: absolute; top: 10px; left: 10px; background: #e11d48; color: #fff; font-size: .7rem; font-weight: 800;
+    padding: 4px 10px; border-radius: 999px; letter-spacing: .5px; display: none; animation: blink 1.3s infinite; }
+  .cam.on.scanning .live-tag { display: block; }
+  @keyframes blink { 50% { opacity: .45; } }
+  .live-badge { position: absolute; left: 10px; right: 10px; bottom: 10px; padding: 10px 14px; border-radius: 14px;
+    background: rgba(0,0,0,.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); color: #fff;
+    display: none; align-items: center; justify-content: space-between; gap: 10px; font-weight: 700; font-size: .95rem; }
+  .cam.on .live-badge { display: flex; }
+  .live-badge .st { padding: 3px 10px; border-radius: 999px; font-size: .8rem; background: #64748b; text-transform: capitalize; }
+  .cam[data-state="fresh"] .live-badge .st { background: var(--fresh); color: #052e1f; }
+  .cam[data-state="rotten"] .live-badge .st { background: var(--rotten); color: #3b0613; }
+
+  .cam-controls { display: none; margin-top: 14px; flex-direction: column; gap: 10px; }
+  .row { display: flex; gap: 10px; }
+  .switch { display: flex; align-items: center; gap: 8px; font-size: .9rem; color: var(--muted); cursor: pointer; user-select: none; }
+  .switch input { width: 18px; height: 18px; accent-color: #34d399; cursor: pointer; }
+  .switch-row { display: flex; align-items: center; justify-content: space-between; }
+
+  .primary {
+    width: 100%; margin-top: 16px; padding: 15px; font-size: 1.05rem; font-weight: 700; color: #052e1f;
+    border-radius: 16px; background: linear-gradient(90deg, #34d399, #a3e635);
+    box-shadow: 0 8px 24px -8px #34d399; transition: transform .15s, box-shadow .15s, opacity .2s;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+  }
+  .primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 12px 28px -8px #34d399; }
+  .primary:disabled { opacity: .45; cursor: not-allowed; filter: grayscale(.4); }
+  .cam-controls .primary, .row .primary { margin-top: 0; }
+  .spinner { width: 18px; height: 18px; border: 3px solid rgba(5,46,31,.3); border-top-color: #052e1f; border-radius: 50%; animation: spin .7s linear infinite; display: none; }
+  .loading-btn .spinner { display: block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .ghost {
+    padding: 13px 16px; font-size: 1rem; font-weight: 600; color: var(--text);
+    background: var(--track); border-radius: 16px; border: 1px solid var(--card-border);
+  }
+  .ghost:hover { background: var(--card-border); }
+  #reset { width: 100%; margin-top: 16px; display: none; }
+  #camStop { flex: none; }
+  #camFlip { flex: none; }
+
+  /* result */
+  .result { display: none; margin-top: 20px; padding: 18px; border-radius: 20px; background: var(--track); align-items: center; gap: 18px; animation: pop .5s cubic-bezier(.2,1.4,.4,1); }
+  .result.show { display: flex; }
+  @keyframes pop { from { opacity: 0; transform: translateY(14px) scale(.95); } to { opacity: 1; transform: none; } }
+  .ring { position: relative; width: 110px; height: 110px; flex: none; }
+  .ring svg { transform: rotate(-90deg); width: 100%; height: 100%; }
+  .ring circle { fill: none; stroke-width: 10; stroke-linecap: round; }
+  .ring .bg { stroke: var(--track); }
+  .ring .fg { stroke: var(--accent); stroke-dasharray: 326.73; stroke-dashoffset: 326.73; transition: stroke-dashoffset 1.1s cubic-bezier(.3,.9,.3,1), stroke .4s; }
+  .ring-text { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; }
+  .ring-text b { font-size: 1.5rem; }
+  .ring-text .lbl { font-size: .68rem; color: var(--muted); letter-spacing: .5px; text-transform: uppercase; }
+  .info { min-width: 0; }
+  .fruit { font-size: 1.6rem; font-weight: 800; text-transform: capitalize; margin: 0 0 6px; display: flex; align-items: center; gap: 8px; }
+  .pill { display: inline-block; padding: 5px 14px; border-radius: 999px; font-weight: 700; font-size: .85rem; text-transform: capitalize; background: var(--accent); color: #0b1f1a; transition: background .4s; }
+  .msg { margin: 10px 0 0; font-size: .88rem; color: var(--muted); line-height: 1.4; }
+
+  .toast { display: none; margin-top: 16px; padding: 12px 16px; border-radius: 14px; background: rgba(251,113,133,.18); border: 1px solid var(--rotten); color: var(--text); font-size: .9rem; }
+  .foot { text-align: center; margin: 18px 0 0; font-size: .75rem; color: var(--muted); }
+
+  @media (max-width: 420px) { .card { padding: 20px; } .result { flex-direction: column; text-align: center; } .fruit { justify-content: center; } }
+</style>
+</head>
+<body>
+  <span class="blob b1"></span><span class="blob b2"></span><span class="blob b3"></span>
+
+  <main class="card" id="card" data-state="idle">
+    <header>
+      <div class="logo">🍎</div>
+      <h1>Fruit Freshness Checker</h1>
+      <p class="sub">Upload a photo or use your camera to check if fruit is fresh or rotten</p>
+    </header>
+
+    <div class="tabs">
+      <button class="tab active" id="tabUpload" data-tab="upload">📁 Upload</button>
+      <button class="tab" id="tabCamera" data-tab="camera">📷 Live Camera</button>
+    </div>
+
+    <!-- UPLOAD PANEL -->
+    <section class="panel active" id="panelUpload">
+      <div class="drop" id="drop" tabindex="0" role="button" aria-label="Upload a fruit photo">
+        <div class="icon">📷</div>
+        <b>Click, drag &amp; drop, or paste</b>
+        <small>JPG, PNG or WEBP &middot; up to 10 MB</small>
+      </div>
+      <input type="file" id="file" accept="image/*" hidden>
+      <button class="primary" id="btn" disabled><span class="spinner"></span><span id="btnText">Analyze</span></button>
+      <button class="ghost" id="reset">↺ Try another photo</button>
+    </section>
+
+    <!-- CAMERA PANEL -->
+    <section class="panel" id="panelCamera">
+      <div class="cam" id="cam" data-state="idle">
+        <div class="cam-ph"><div class="icon">🎥</div><b>Live fruit scanner</b><small>Point your camera at a fruit</small></div>
+        <video id="video" autoplay playsinline muted></video>
+        <div class="guide"></div>
+        <div class="live-tag">● LIVE</div>
+        <div class="live-badge"><span id="liveName">Scanning…</span><span class="st" id="liveStatus">…</span></div>
+      </div>
+      <button class="primary" id="camStart">📷 Start camera</button>
+      <div class="cam-controls" id="camControls">
+        <div class="row">
+          <button class="primary" id="camCapture">📸 Capture</button>
+          <button class="ghost" id="camFlip" title="Switch camera">🔄</button>
+          <button class="ghost" id="camStop">⏹ Stop</button>
+        </div>
+        <div class="switch-row">
+          <label class="switch"><input type="checkbox" id="liveToggle" checked> Live scan (auto-detect)</label>
+        </div>
+      </div>
+    </section>
+
+    <div class="toast" id="toast"></div>
+
+    <section class="result" id="result">
+      <div class="ring">
+        <svg viewBox="0 0 120 120"><circle class="bg" cx="60" cy="60" r="52"/><circle class="fg" id="fg" cx="60" cy="60" r="52"/></svg>
+        <div class="ring-text"><b><span id="pct">0</span>%</b><span class="lbl">confidence</span></div>
+      </div>
+      <div class="info">
+        <h2 class="fruit"><span id="emoji">🍎</span><span id="fruit"></span></h2>
+        <span class="pill" id="status"></span>
+        <p class="msg" id="msg"></p>
+      </div>
+    </section>
+
+    <p class="foot">Powered by Teachable Machine &middot; FastAPI</p>
+  </main>
+
+<script>
+  // Empty = same server. If you open this file separately, use "http://127.0.0.1:8000"
+  const API_URL = "";
+  const EMOJI = { apple:"🍎", banana:"🍌", orange:"🍊", mango:"🥭", strawberry:"🍓", grape:"🍇", grapes:"🍇", lemon:"🍋", pear:"🍐", peach:"🍑", tomato:"🍅", pineapple:"🍍", watermelon:"🍉", cherry:"🍒", potato:"🥔", carrot:"🥕" };
+  const LIVE_INTERVAL_MS = 1200;
+
+  const $ = id => document.getElementById(id);
+  const card = $("card"), drop = $("drop"), fileInput = $("file"), btn = $("btn"), btnText = $("btnText");
+  const reset = $("reset"), toast = $("toast"), result = $("result");
+  const cam = $("cam"), video = $("video"), grab = document.createElement("canvas");
+  let selectedFile = null, stream = null, liveTimer = null, busy = false, facing = "environment";
+
+  /* ---------- shared helpers ---------- */
+  function showError(msg) { toast.textContent = "⚠️ " + msg; toast.style.display = "block"; }
+  function clearError() { toast.style.display = "none"; }
+
+  async function predict(blob) {
+    const form = new FormData();
+    form.append("file", blob, blob.name || "frame.jpg");
+    const res = await fetch(API_URL + "/predict", { method: "POST", body: form });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Server error (" + res.status + ")");
+    }
+    return res.json();
+  }
+
+  function countUp(target) {
+    const el = $("pct"), start = performance.now(), dur = 1100;
+    (function tick(now) {
+      const t = Math.min((now - start) / dur, 1);
+      el.textContent = (target * (1 - Math.pow(1 - t, 3))).toFixed(1);
+      if (t < 1) requestAnimationFrame(tick);
+    })(start);
+  }
+
+  function showResult(data, animate = true) {
+    const fresh = data.status.toLowerCase().includes("fresh");
+    const pct = data.confidence * 100;
+    card.dataset.state = fresh ? "fresh" : "rotten";
+    $("emoji").textContent = EMOJI[data.fruit.toLowerCase()] || "🍽️";
+    $("fruit").textContent = data.fruit;
+    $("status").textContent = (fresh ? "✅ " : "⚠️ ") + data.status;
+    let msg = fresh ? "Looks good! This fruit appears fresh and safe to eat."
+                    : "Signs of spoilage detected. It's better not to eat this one.";
+    if (data.confidence < 0.6) msg += " The model isn't very sure, so try a clearer, well-lit photo.";
+    $("msg").textContent = msg;
+    result.classList.add("show");
+    if (animate) {
+      $("fg").style.strokeDashoffset = 326.73;
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        $("fg").style.strokeDashoffset = 326.73 * (1 - data.confidence);
+      }));
+      countUp(pct);
+    } else {
+      $("fg").style.strokeDashoffset = 326.73 * (1 - data.confidence);
+      $("pct").textContent = pct.toFixed(1);
+    }
+    return fresh;
+  }
+
+  /* ---------- tabs ---------- */
+  function switchTab(name) {
+    if (name !== "camera") stopCamera();
+    document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
+    $("panelUpload").classList.toggle("active", name === "upload");
+    $("panelCamera").classList.toggle("active", name === "camera");
+    result.classList.remove("show");
+    card.dataset.state = "idle";
+    clearError();
+    if (name === "upload") {
+      reset.style.display = "none";
+      btn.style.display = "flex";
+      btn.disabled = !selectedFile;
+    }
+  }
+  document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => switchTab(t.dataset.tab)));
+
+  /* ---------- upload mode ---------- */
+  drop.addEventListener("click", () => fileInput.click());
+  drop.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.click(); } });
+  fileInput.addEventListener("change", () => setFile(fileInput.files[0]));
+  ["dragover", "dragenter"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+  drop.addEventListener("drop", e => setFile(e.dataTransfer.files[0]));
+  document.addEventListener("paste", e => {
+    const item = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith("image/"));
+    if (item) { switchTab("upload"); setFile(item.getAsFile()); }
+  });
+
+  function setFile(file) {
+    if (!file || !file.type.startsWith("image/")) return showError("Please choose an image file.");
+    clearError();
+    selectedFile = file;
+    result.classList.remove("show");
+    card.dataset.state = "idle";
+    drop.classList.add("has-img");
+    drop.innerHTML = '<img alt="Selected fruit"><div class="scan"></div>';
+    drop.querySelector("img").src = URL.createObjectURL(file);
+    btn.style.display = "flex";
+    reset.style.display = "none";
+    btn.disabled = false;
+  }
+
+  btn.addEventListener("click", async () => {
+    if (!selectedFile) return;
+    clearError();
+    btn.disabled = true; btn.classList.add("loading-btn"); btnText.textContent = "Analyzing…";
+    drop.classList.add("loading");
+    try {
+      const data = await predict(selectedFile);
+      showResult(data, true);
+      btn.style.display = "none";
+      reset.style.display = "block";
+    } catch (e) {
+      showError(e.message === "Failed to fetch" ? "Cannot reach the server. Is it running?" : e.message);
+      btn.disabled = false;
+    } finally {
+      btn.classList.remove("loading-btn"); btnText.textContent = "Analyze";
+      drop.classList.remove("loading");
+    }
+  });
+
+  reset.addEventListener("click", () => {
+    selectedFile = null; fileInput.value = "";
+    card.dataset.state = "idle";
+    result.classList.remove("show");
+    drop.classList.remove("has-img");
+    drop.innerHTML = '<div class="icon">📷</div><b>Click, drag &amp; drop, or paste</b><small>JPG, PNG or WEBP · up to 10 MB</small>';
+    reset.style.display = "none"; btn.style.display = "flex"; btn.disabled = true;
+    clearError();
+  });
+
+  /* ---------- camera mode ---------- */
+  async function startCamera() {
+    clearError();
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      return showError("Camera is not available. Open this page at http://127.0.0.1:8000 in Chrome or Edge.");
+    }
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false
+      });
+    } catch (e) {
+      const msg = e.name === "NotAllowedError" ? "Camera permission denied. Click the camera/lock icon in the address bar and allow access."
+                : e.name === "NotFoundError" ? "No camera found on this device."
+                : e.name === "NotReadableError" ? "Camera is being used by another app. Close it and try again."
+                : "Could not start the camera: " + e.message;
+      return showError(msg);
+    }
+    video.srcObject = stream;
+    await video.play().catch(() => {});
+    cam.classList.add("on");
+    $("camStart").style.display = "none";
+    $("camControls").style.display = "flex";
+    result.classList.remove("show");
+    applyLive();
+  }
+
+  function stopCamera() {
+    clearInterval(liveTimer); liveTimer = null; busy = false;
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    video.srcObject = null;
+    cam.classList.remove("on", "scanning");
+    cam.dataset.state = "idle";
+    $("camStart").style.display = "flex";
+    $("camControls").style.display = "none";
+    $("liveName").textContent = "Scanning…"; $("liveStatus").textContent = "…";
+  }
+
+  function frameBlob(shortSide, quality) {
+    const vw = video.videoWidth, vh = video.videoHeight;
+    const s = Math.min(shortSide / Math.min(vw, vh), 1);
+    grab.width = Math.round(vw * s); grab.height = Math.round(vh * s);
+    grab.getContext("2d").drawImage(video, 0, 0, grab.width, grab.height);
+    return new Promise(res => grab.toBlob(res, "image/jpeg", quality));
+  }
+
+  function applyLive() {
+    clearInterval(liveTimer); liveTimer = null;
+    const on = $("liveToggle").checked && !!stream;
+    cam.classList.toggle("scanning", on);
+    if (on) { liveTimer = setInterval(liveTick, LIVE_INTERVAL_MS); liveTick(); }
+    else { cam.dataset.state = "idle"; card.dataset.state = "idle"; result.classList.remove("show"); }
+  }
+
+  async function liveTick() {
+    if (busy || !stream || !video.videoWidth) return;
+    busy = true;
+    try {
+      const blob = await frameBlob(320, 0.85);
+      if (!stream) return;
+      const data = await predict(blob);
+      if (!stream || !$("liveToggle").checked) return;
+      const fresh = showResult(data, false);
+      const sure = data.confidence >= 0.6;
+      cam.dataset.state = sure ? (fresh ? "fresh" : "rotten") : "idle";
+      $("liveName").textContent = (EMOJI[data.fruit.toLowerCase()] || "🍽️") + " " + data.fruit.replace(/^./, c => c.toUpperCase()) + " · " + (data.confidence * 100).toFixed(0) + "%";
+      $("liveStatus").textContent = sure ? data.status : "not sure";
+    } catch (e) {
+      showError(e.message === "Failed to fetch" ? "Cannot reach the server. Is it running?" : e.message);
+      $("liveToggle").checked = false; applyLive();
+    } finally { busy = false; }
+  }
+
+  $("camStart").addEventListener("click", startCamera);
+  $("camStop").addEventListener("click", () => { stopCamera(); result.classList.remove("show"); card.dataset.state = "idle"; });
+  $("liveToggle").addEventListener("change", applyLive);
+  $("camFlip").addEventListener("click", async () => {
+    facing = facing === "environment" ? "user" : "environment";
+    stopCamera(); await startCamera();
+  });
+  $("camCapture").addEventListener("click", async () => {
+    if (!stream || !video.videoWidth) return;
+    const blob = await frameBlob(100000, 0.92);
+    const file = new File([blob], "capture.jpg", { type: "image/jpeg" });
+    stopCamera();
+    switchTab("upload");
+    setFile(file);
+    btn.click();
+  });
+  document.addEventListener("visibilitychange", () => { if (document.hidden && stream) stopCamera(); });
+</script>
+</body>
+</html>
